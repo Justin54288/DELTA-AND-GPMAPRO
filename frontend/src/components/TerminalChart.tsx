@@ -9,7 +9,7 @@ import {
 } from "lightweight-charts";
 import { Expand, Layers3, Shrink, Type } from "lucide-react";
 
-export type ChartLayer = "delta" | "gpmapro" | "gpma2" | "chanlun";
+export type ChartLayer = "price" | "delta" | "gpmapro" | "gpma2" | "chanlun";
 export type ChartBar = {
   time: string;
   open: number;
@@ -589,6 +589,8 @@ export function TerminalChart({
       return;
     }
     setChartError(null);
+    const isPriceOnly = selectedLayer === "price";
+    const showsGpma = selectedLayer === "gpmapro" || selectedLayer === "gpma2";
     const css = getComputedStyle(document.documentElement);
     const chartTheme = {
       canvas: css.getPropertyValue("--ws-surface-1").trim(),
@@ -641,26 +643,21 @@ export function TerminalChart({
       candles.setData(chartBars);
       candles
         .priceScale()
-        .applyOptions({ scaleMargins: { top: 0.07, bottom: 0.18 } });
-      const volume = activeChart.addSeries(HistogramSeries, {
-        priceFormat: { type: "volume" },
-        priceScaleId: "",
-      });
-      volume.setData(
-        chartBars.map((bar) => ({
+        .applyOptions({ scaleMargins: { top: 0.07, bottom: isPriceOnly ? 0.07 : 0.18 } });
+      if (!isPriceOnly) {
+        const volume = activeChart.addSeries(HistogramSeries, {
+          priceFormat: { type: "volume" },
+          priceScaleId: "",
+        });
+        volume.setData(chartBars.map((bar) => ({
           time: bar.time,
           value: bar.volume,
-          color:
-            bar.close >= bar.open
-              ? colorWithAlpha(chartTheme.danger, 0.46)
-              : colorWithAlpha(chartTheme.success, 0.46),
-        })),
-      );
-      volume
-        .priceScale()
-        .applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+          color: bar.close >= bar.open ? colorWithAlpha(chartTheme.danger, 0.46) : colorWithAlpha(chartTheme.success, 0.46),
+        })));
+        volume.priceScale().applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+      }
 
-      if (selectedLayer !== "delta") {
+      if (showsGpma) {
         EMA_LINES.forEach(({ key, colour }) => {
           let active: Array<{ time: string; value: number }> = [];
           let activeColour: boolean | null = null;
@@ -711,7 +708,7 @@ export function TerminalChart({
         addMovingAverage("ma_250", chartTheme.text);
       }
       const specs: OverlaySpec[] = [];
-      if (selectedLayer !== "delta") {
+      if (showsGpma) {
         chartGpma.forEach((row) => {
           (row.draw_nodes ?? []).forEach((node, index) => {
             // GPMA2's icon 4 means a top crying face, while old GPMAPRO uses
@@ -783,7 +780,7 @@ export function TerminalChart({
       let refreshFrame: number | undefined;
       const refreshOverlays = () => {
         let laidOutGpma: OverlayPosition[] = [];
-        if (selectedLayer === "delta") {
+        if (!showsGpma) {
           setOverlays([]);
         } else {
           const first = chartBars[0]
@@ -821,6 +818,11 @@ export function TerminalChart({
             y: positions.get(item.id)?.y ?? item.y,
           }));
           setOverlays(laidOutGpma);
+        }
+        if (isPriceOnly) {
+          setDeltaOverlays([]);
+          setChanlunOverlays({ bis: [], zones: [], points: [] });
+          return;
         }
         const width = host.current?.clientWidth ?? 0;
         const inside = (x: number | null) =>
@@ -1063,6 +1065,7 @@ export function TerminalChart({
   ]);
 
   const modes: Array<[ChartLayer, string]> = [
+    ["price", "纯股票走势"],
     ["gpmapro", "GPMAPRO + DELTA"],
     ["gpma2", "GPMA2 + DELTA"],
     ["delta", "仅 DELTA"],
@@ -1077,7 +1080,9 @@ export function TerminalChart({
         <div className="chart-title">
           <Layers3 size={15} strokeWidth={1.6} />
           <span>
-            {selectedLayer === "gpma2"
+            {selectedLayer === "price"
+              ? "纯股票走势"
+              : selectedLayer === "gpma2"
               ? "GPMA2 + DELTA"
               : selectedLayer === "delta"
                 ? "DELTA 主图"
@@ -1119,7 +1124,7 @@ export function TerminalChart({
         <svg
           className="pointer-events-none absolute inset-0 z-10 w-full overflow-visible"
           style={{ height: chartHeight }}
-          aria-label="GPMAPRO 与 DELTA 图层"
+          aria-label={selectedLayer === "price" ? "纯股票走势" : "GPMAPRO 与 DELTA 图层"}
         >
           {overlays.map((item) => (
             <Annotation key={item.id} item={item} />
@@ -1195,6 +1200,7 @@ export function TerminalChart({
           )}
         </svg>
       </div>
+      {selectedLayer !== "price" && <>
       <div className="chart-legend">
         <span className="chart-legend-up">红色：EMA 当前强于比较均线</span>
         <span className="chart-legend-down">绿色：EMA 当前弱于比较均线</span>
@@ -1258,6 +1264,7 @@ export function TerminalChart({
           <small>虚线紫圈为 IBP；仅在确认日后生效。</small>
         </div>
       )}
+      </>}
       {selectedLayer === "chanlun" && (
         <div className="chanlun-summary">
           <strong>简化缠论结构</strong>
