@@ -140,6 +140,29 @@ def test_transition_table_covers_one_full_future_number_cycle():
     first = result["future_predictions"][0]
     table_row = result["transition_table"][first["number"] - 1]
     assert table_row["prediction"]["expected_date"] == first["expected_date"]
+    expected_types = {item["number"]: item["type"] for item in result["transition_predictions"]}
+    assert all(row["type"] == expected_types[row["number"]] for row in result["transition_table"])
+
+
+def test_transition_table_uses_effective_reversal_types(monkeypatch):
+    engine = ITDDeltaEngine()
+
+    def force_inversion(_data, points, _dates):
+        for point in points:
+            point["type"] = "LOW" if point["type"] == "HIGH" else "HIGH"
+        return {"state": "INVERSION_CONFIRMED"}
+
+    baseline = ITDDeltaEngine().analyze(bars(310))
+    monkeypatch.setattr(engine, "_apply_reversals", force_inversion)
+    inverted = engine.analyze(bars(310))
+    baseline_types = {item["number"]: item["type"] for item in baseline["transition_predictions"]}
+    inverted_types = {item["number"]: item["type"] for item in inverted["transition_predictions"]}
+
+    assert any(baseline_types[number] != point_type for number, point_type in inverted_types.items())
+    assert all(
+        row["type"] == inverted_types[row["number"]]
+        for row in inverted["transition_table"]
+    )
 
 
 def test_live_unit_number_and_prediction_are_stock_specific_not_forced_to_one():

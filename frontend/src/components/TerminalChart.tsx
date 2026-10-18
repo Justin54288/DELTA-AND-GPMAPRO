@@ -78,6 +78,7 @@ export type DeltaAnalysis = {
   };
   transition_table?: Array<{
     number: number;
+    type: "HIGH" | "LOW" | null;
     sample_count: number;
     mean_days: number | null;
     std_days: number | null;
@@ -147,6 +148,7 @@ type DeltaOverlay = {
   dashed?: boolean;
   labelOffsetY?: number;
   detail?: string;
+  pointType?: "HIGH" | "LOW";
 };
 type ChanlunOverlay = {
   bis: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; direction: "up" | "down" }>;
@@ -159,6 +161,9 @@ const DELTA_COLOURS = {
   RED: "#ef4444",
   BLUE: "#2563eb",
 } as const;
+const DELTA_HIGH_COLOR = "#b4232d";
+const DELTA_LOW_COLOR = "#126b45";
+const DELTA_CANDIDATE_RING_COLOR = "#c78500";
 
 type EmaKey =
   | "ema_8"
@@ -873,7 +878,9 @@ export function TerminalChart({
               x: x!,
               y,
               label: String(point.number),
-              color: point.type === "HIGH" ? "#dc2626" : "#159947",
+              color:
+                point.type === "HIGH" ? DELTA_HIGH_COLOR : DELTA_LOW_COLOR,
+              pointType: point.type,
               labelOffsetY:
                 (point.type === "HIGH" ? -9 : 15) +
                 lane * (point.type === "HIGH" ? -12 : 12),
@@ -892,7 +899,11 @@ export function TerminalChart({
               x: x!,
               y,
               label: `${boundary.number}?`,
-              color: "#c78500",
+              color:
+                boundary.type === "HIGH"
+                  ? DELTA_HIGH_COLOR
+                  : DELTA_LOW_COLOR,
+              pointType: boundary.type,
             });
         }
         (deltaAnalysis?.reversal?.ibps ?? []).forEach((ibp) => {
@@ -920,10 +931,9 @@ export function TerminalChart({
             item.kind !== "ibp"
           )
             return [];
-          const top =
-            item.kind === "point"
-              ? item.color === "#dc2626"
-              : (item.y ?? 0) < chartHeight / 2;
+          const top = item.kind === "point"
+            ? item.pointType === "HIGH"
+            : (item.y ?? 0) < chartHeight / 2;
           const centerY =
             item.kind === "point"
               ? (item.y ?? 0) + (item.labelOffsetY ?? (top ? -9 : 15))
@@ -1155,14 +1165,18 @@ export function TerminalChart({
             ) : item.kind === "point" ? (
               <text
                 key={item.id}
+                className={`delta-point-label delta-point-label-${item.pointType === "HIGH" ? "high" : "low"}`}
                 x={item.x}
                 y={
                   (item.y ?? 0) +
-                  (item.labelOffsetY ?? (item.color === "#dc2626" ? -9 : 15))
+                  (item.labelOffsetY ?? (item.pointType === "HIGH" ? -9 : 15))
                 }
                 textAnchor="middle"
                 fill={item.color}
-                fontSize="12"
+                stroke="var(--ws-surface-1)"
+                strokeWidth="3"
+                paintOrder="stroke"
+                fontSize="13"
                 fontWeight="700"
               >
                 {item.label}
@@ -1174,11 +1188,20 @@ export function TerminalChart({
                   cy={item.y}
                   r={item.kind === "ibp" ? "12" : "14"}
                   className="chart-forecast-node"
-                  stroke={item.color}
+                  stroke={
+                    item.kind === "forecast"
+                      ? DELTA_CANDIDATE_RING_COLOR
+                      : item.color
+                  }
                   strokeWidth="2"
                   strokeDasharray={item.dashed ? "4 3" : undefined}
                 />
                 <text
+                  className={
+                    item.kind === "forecast"
+                      ? `delta-point-label delta-point-label-${item.pointType === "HIGH" ? "high" : "low"}`
+                      : undefined
+                  }
                   x={item.x}
                   y={(item.y ?? 0) + 4}
                   textAnchor="middle"
@@ -1202,6 +1225,8 @@ export function TerminalChart({
       </div>
       {selectedLayer !== "price" && <>
       <div className="chart-legend">
+        <span className="chart-legend-delta-low">DELTA 低点数字＝绿色</span>
+        <span className="chart-legend-delta-high">DELTA 高点数字＝红色</span>
         <span className="chart-legend-up">红色：EMA 当前强于比较均线</span>
         <span className="chart-legend-down">绿色：EMA 当前弱于比较均线</span>
         <span>虚线：E120 / E250</span>
@@ -1349,8 +1374,23 @@ function DeltaTransitionTable({
                   className={`${conditional ? "is-conditional" : ""} ${active ? "is-active" : ""}`}
                 >
                   <td className={active && !conditional ? "is-emphasis" : ""}>
-                    {row.number}
-                    {active && row.number === activeNumbers[0] ? "?" : ""}
+                    <span
+                      className={`delta-transition-target ${
+                        row.type === "HIGH"
+                          ? "delta-transition-target-high"
+                          : row.type === "LOW"
+                            ? "delta-transition-target-low"
+                            : ""
+                      }`}
+                    >
+                      {row.number}
+                      {active && row.number === activeNumbers[0] ? "?" : ""}
+                    </span>
+                    {row.type && (
+                      <span className="delta-transition-point-type">
+                        {row.type === "HIGH" ? "高点" : "低点"}
+                      </span>
+                    )}
                   </td>
                   <td className={conditional ? "is-warning" : active ? "is-emphasis" : "is-window"}>
                     {prediction ? (

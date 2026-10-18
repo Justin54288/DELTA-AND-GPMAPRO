@@ -374,7 +374,7 @@ class ITDDeltaEngine:
         for n in range(1,13):
             sample=[(_day(b["date"])-_day(a["date"])).days for a,b in zip(confirmed,confirmed[1:]) if b["number"]==n]
             next_occurrence=next((item for item in all_pred if item["number"] == n), None)
-            table.append({"number":n,"sample_count":len(sample),"mean_days":round(statistics.mean(sample),2) if sample else None,"std_days":round(statistics.stdev(sample),2) if len(sample)>=2 else None,"last_interval_days":sample[-1] if sample else None,"prediction":next_occurrence})
+            table.append({"number":n,"type":next_occurrence["type"] if next_occurrence else None,"sample_count":len(sample),"mean_days":round(statistics.mean(sample),2) if sample else None,"std_days":round(statistics.stdev(sample),2) if len(sample)>=2 else None,"last_interval_days":sample[-1] if sample else None,"prediction":next_occurrence})
         bounds=[{"id":f"itd-{i//118+1}","date":dates[i].isoformat(),"label":f"ITD{i//118+1}"} for i in range(0,len(dates),118)]
         return {**base,"status":"READY" if confirmed else "STRUCTURE_ONLY","sequence_label":"Skill DELTA ITD (118 bars, N=12)","complete_units":len(data)//118,"grid_lines":fixed_cycle_grid(dates,dates),"cycle_boundaries":bounds,"points":raw,"confirmed_points":confirmed,"candidate_points":[p for p in raw if not p["confirmed"]],"boundary_point":raw[-1] if raw else None,"next_prediction":pred[0] if pred else None,"future_predictions":pred,"transition_predictions":all_pred,"transition_table":table,"reversal":reversal,"history_confidence":"SUFFICIENT" if len(data)>=756 else "LIMITED"}
     def signal_windows(self,frame):
